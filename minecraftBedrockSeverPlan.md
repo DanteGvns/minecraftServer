@@ -1,92 +1,153 @@
-# Minecraft Bedrock DevOps Project Plan  
-## Overview  
-Goal: Build a production-style Minecraft Bedrock server on a dedicated PC and use it as a real DevOps practice environment (CI/CD, automation, remote deployment, backups, logging, configuration drift management, containerization).  
-Server Type: Minecraft Bedrock Edition  
-Runtime Model: Docker + Docker Compose (recommended), optional Kubernetes  
-Remote Access: SSH or Tailscale  
-Automation: GitHub Actions, shell scripts, systemd timers  
-Backup Strategy: rclone + persistent volumes  
-Logging Strategy: Docker logs + optional Prometheus/Loki  
-Monitoring: mc-monitor (built into itzg image)  
+# Windows + WSL2 Home Lab + Minecraft Bedrock DevOps Setup Plan
 
-## Stage 1 — Architecture and Planning  
-Define how the server will run:  
-The server will run inside a container using the `itzg/minecraft-bedrock-server` image. This provides automatic version updates, persistent world storage, health checks, and environment-variable-based configuration.  
-Decide on software to install:  
-Install Docker, Docker Compose, Git, optional WSL2 (if Windows host), optional Tailscale for secure remote access, optional rclone for cloud backups.  
-Decide on deployment model:  
-Option A: Single Docker container (simple).  
-Option B: Docker Compose stack (best for reliability and automation).  
-Option C: Kubernetes (maximum DevOps realism).  
-Decide on automation approach:  
-Use GitHub Actions to push configuration changes and trigger remote redeploys.  
-Use scripts for initial provisioning and configuration drift management.  
-Decide on containerization:  
-Containerization is recommended because it provides immutable deployments, easy upgrades, reproducible environments, and clean CI/CD integration.  
+Install Windows updates and install Windows Terminal from the Microsoft Store.
 
-## Stage 2 — Initial Automation Setup  
-Create a bootstrap script:  
-This script installs Docker, Docker Compose, Git, Tailscale (optional), and rclone (optional). It prepares the machine for remote deployment.  
-Create a remote-first workflow:  
-SSH into the server, clone the GitHub repo, run `bootstrap.sh`, then run `deploy.sh` to start the Bedrock container.  
-Define repository structure:
+Install WSL2 using the modern unified installer:
+wsl --install
 
+Create a desktop shortcut to open wsl
+# Get the default WSL distro name
+$distro = (wsl -l -v | Select-String "\*" | ForEach-Object {
+    ($_ -split "\s+")[1]
+})
 
+# Build the shortcut path using the distro name
+$ShortcutPath = "$env:USERPROFILE\Desktop\$distro WSL.lnk"
+
+# Create the shortcut
+$WScriptShell = New-Object -ComObject WScript.Shell
+$Shortcut = $WScriptShell.CreateShortcut($ShortcutPath)
+$Shortcut.TargetPath = "C:\Windows\System32\wsl.exe"
+$Shortcut.Arguments = "-d $distro ~"
+$Shortcut.IconLocation = "C:\Windows\System32\wsl.exe"
+$Shortcut.Save()
+
+Reboot if prompted.
+
+Launch Ubuntu from the Start Menu and create your Linux user.
+
+Update the Linux system:
+sudo apt update && sudo apt upgrade -y
+
+Install essential packages:
+sudo apt install git curl wget unzip -y
+
+Enable systemd inside WSL2 by editing /etc/wsl.conf:
+[boot]
+systemd=true
+
+Shutdown WSL:
+wsl --shutdown
+
+Restart Ubuntu.
+
+Install Docker inside WSL2:
+sudo apt install docker.io docker-compose -y
+sudo systemctl enable docker
+sudo systemctl start docker
+
+Add your user to the docker group:
+sudo usermod -aG docker $USER
+
+Shutdown WSL again:
+wsl --shutdown
+
+Verify Docker:
+docker run hello-world
+
+Optional home lab tools:
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up
+sudo apt install rclone -y
+
+Create your infrastructure repository structure:
 /infra
-bootstrap.sh
-deploy.sh
-docker-compose.yml
-backup.sh
-gamerules.sh
-logs/
-README.md
+  bootstrap.sh
+  deploy.sh
+  docker-compose.yml
+  backup.sh
+  gamerules.sh
+  logs/
+  README.md
 
+bootstrap.sh:
+#!/bin/bash
+sudo apt update && sudo apt upgrade -y
+sudo apt install docker.io docker-compose git rclone -y
+sudo systemctl enable docker
+sudo systemctl start docker
+mkdir -p ~/mc/logs
 
-Define bootstrap.sh responsibilities:  
-Install required software, enable Docker service, configure firewall, optionally join Tailscale.  
-Define deploy.sh responsibilities:  
-Pull the Bedrock server image, start the container, apply gamerules, verify health using mc-monitor.  
+docker-compose.yml:
+version: "3.8"
+services:
+  bedrock:
+    image: itzg/minecraft-bedrock-server
+    container_name: bedrock
+    ports:
+      - "19132:19132/udp"
+    environment:
+      EULA: "TRUE"
+      VERSION: "LATEST"
+    volumes:
+      - bedrock_data:/data
+    restart: unless-stopped
+volumes:
+  bedrock_data:
 
-## Stage 3 — CI/CD, Deployment Automation, Logging, Backups  
-Automate deployment:  
-Use GitHub Actions to SSH into the server and run `docker compose pull && docker compose up -d`.  
-Use environment variables in docker-compose.yml to define server.properties and gamerules.  
-Automate configuration drift:  
-Create a gamerules.sh script that sends commands to the Bedrock server after startup.  
-Run gamerules.sh via systemd or as part of deploy.sh.  
-Automate logging:  
-Use Docker logs for basic logging.  
-Optionally forward logs to Loki or ELK.  
-Use mc-monitor for health checks and expose metrics to Prometheus if desired.  
-Automate world backups:  
-Use a persistent Docker volume for `/data`.  
-Create backup.sh to pause the server, copy world data, and upload via rclone.  
-Schedule backup.sh using cron or systemd timers.  
-Automate updates:  
-The Bedrock container automatically updates to the latest version when restarted if `VERSION=LATEST` is set.  
-CI/CD pipeline can trigger restarts after configuration changes.  
+deploy.sh:
+#!/bin/bash
+docker compose pull
+docker compose up -d
+sleep 10
+./gamerules.sh
 
-## Final Architecture Summary  
-Host: Windows or Linux PC  
-Runtime: Docker + Docker Compose  
-Network: Expose UDP 19132  
-Storage: Docker volume `mc-bedrock-data`  
-Automation: GitHub Actions → SSH → deploy  
-Backups: rclone + systemd timer  
-Logging: Docker logs + optional Loki  
-Monitoring: mc-monitor  
-Remote Access: SSH or Tailscale  
-Optional: Web console similar to mc_servermanager  
-Optional: Kubernetes deployment for advanced DevOps practice  
+gamerules.sh:
+#!/bin/bash
+docker exec bedrock send-command "gamerule showcoordinates true"
+docker exec bedrock send-command "gamerule keepinventory true"
+docker exec bedrock send-command "gamerule dofiretick false"
 
-## Next Steps  
-1. Write bootstrap.sh  
-2. Write docker-compose.yml  
-3. Write deploy.sh  
-4. Write backup.sh  
-5. Write gamerules.sh  
-6. Build GitHub Actions workflow for remote deployment  
-7. Add monitoring and logging integrations  
-8. Add cloud backup schedule  
-9. Add configuration drift enforcement  
-10. Expand to Kubernetes if desired  
+backup.sh:
+#!/bin/bash
+timestamp=$(date +"%Y-%m-%d_%H-%M-%S")
+docker exec bedrock send-command "save hold"
+sleep 5
+docker exec bedrock send-command "save query"
+sleep 5
+cp -r /var/lib/docker/volumes/bedrock_data/_data ~/mc/backups/world_$timestamp
+docker exec bedrock send-command "save resume"
+
+Optional cloud upload:
+rclone copy ~/mc/backups remote:mc-backups
+
+systemd backup timer (/etc/systemd/system/mc-backup.timer):
+[Unit]
+Description=Minecraft Backup Timer
+[Timer]
+OnCalendar=*-*-* 03:00:00
+[Install]
+WantedBy=timers.target
+
+systemd backup service (/etc/systemd/system/mc-backup.service):
+[Unit]
+Description=Minecraft Backup Service
+[Service]
+Type=oneshot
+ExecStart=/home/<user>/infra/backup.sh
+
+Enable timers:
+sudo systemctl enable mc-backup.timer
+sudo systemctl start mc-backup.timer
+
+CI/CD deploy command for GitHub Actions:
+docker compose pull && docker compose up -d
+
+Logs:
+docker logs -f bedrock
+
+Monitoring:
+docker exec bedrock mc-monitor status
+
+Final architecture:
+Windows host, WSL2 Ubuntu runtime, Docker inside WSL2, Bedrock server container, systemd automation, GitHub Actions CI/CD, rclone backups, Tailscale remote access, Docker logs, mc-monitor health checks.
