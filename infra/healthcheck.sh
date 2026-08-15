@@ -47,7 +47,11 @@ fi
 echo "Checking systemd backup service status..."
 systemctl --no-pager status mc-backup.service >/dev/null 2>&1 && echo "Backup service: OK" || echo "Backup service: ERROR"
 
-echo "Checking disk space..."
-df -h / | awk 'NR==2 {print "Disk usage: " $5 " used (" $4 " free)"}'
+echo "Checking WSL disk space..."
+df -h / | awk 'NR==2 {print "WSL Disk: " $5 " used (" $4 " free)"}'
+
+echo "Checking Windows disk space..."
+df -h /mnt/c | awk 'NR==2 {print "C: Drive: " $5 " used (" $4 " free)"}'
 
 echo "Health check complete."
+
