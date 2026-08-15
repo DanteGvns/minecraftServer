@@ -1,0 +1,17 @@
+version: "3.8"
+
+services:
+  bedrock:
+    image: itzg/minecraft-bedrock-server
+    container_name: bedrock
+    ports:
+      - "19132:19132/udp"
+    environment:
+      EULA: "TRUE"
+      VERSION: "LATEST"
+    volumes:
+      - bedrock_data:/data
+    restart: unless-stopped
+
+volumes:
+  bedrock_data:

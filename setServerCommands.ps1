@@ -52,12 +52,15 @@ winget install --id GitHub.GitHubDesktop -e --source winget
 #Clone repo onto the server’s Windows filesystem
 cd C:\Users\<ServerUser>\Documents\
 cd C:\Users\dante\MinecraftServer
+
+cd C:\Users\Dante\Documents\GitHub\minecraftServer
 git clone https://github.com/<your-username>/<your-repo>.git
 
 #Access the repo from WSL2
 cd /mnt/c/Users/<ServerUser>/Documents/<your-repo>
 cd /mnt/c/Users/dante/MinecraftServer
 
+cd /mnt/c/Users/Dante/Documents/GitHub/minecraftServer
 #Enable systemd inside WSL2
 sudo nano /etc/wsl.conf
     [boot]
