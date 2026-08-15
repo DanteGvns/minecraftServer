@@ -97,3 +97,10 @@ Select a backup folder, and the script will stop the container, replace the worl
 ## Notes
 
 All systemd units must be installed using `install-units.sh` because systemd only loads units from `/etc/systemd/system/`. Keeping the unit files in the repo ensures full version control and easy redeployment.
+
+
+## dos2unix
+
+dos2unix infra/*.sh
+dos2unix infra/*.service
+dos2unix infra/*.timer
