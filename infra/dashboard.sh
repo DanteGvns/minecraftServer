@@ -1,108 +1,59 @@
-# Minecraft Bedrock Server Infrastructure
+#!/bin/bash
+# dashboard.sh
+set -e
 
-This repository contains a complete, self‑contained infrastructure setup for running a Minecraft Bedrock server inside WSL2 using Docker. All deployment, backup, automation, logging, health‑checking, restore logic, and dashboard monitoring is included in the `infra/` directory, making the project fully portable and easy to redeploy on any machine.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BACKUP_DIR="$SCRIPT_DIR/backups"
 
-## Overview
+echo "=============================="
+echo " Minecraft Bedrock Dashboard"
+echo "=============================="
 
-The server runs inside WSL2 using Docker and is managed through a set of scripts and systemd units. The design ensures reliable uptime, automated nightly backups, gamerule enforcement, log viewing, health monitoring, restore capability, dashboard status reporting, and simple redeployment. All infrastructure files live in the repo, while systemd units are installed into the Linux system directory using `install-units.sh`.
+echo "Docker:"
+systemctl is-active --quiet docker && echo "  Docker: RUNNING" || echo "  Docker: NOT RUNNING"
 
-## Directory Structure
+echo "Bedrock Container:"
+if docker ps --format '{{.Names}}' | grep -q "bedrock"; then
+  echo "  Container: RUNNING"
+else
+  echo "  Container: NOT RUNNING"
+fi
 
-`infra/docker-compose.yml`  
-Defines the Bedrock server container, ports, volume, and restart policy.
+echo "Bedrock Uptime:"
+docker ps --format '{{.Names}} {{.RunningFor}}' | grep bedrock | awk '{print "  Uptime: " $2 " " $3 " " $4}'
 
-`infra/deploy.sh`  
-Pulls the latest Bedrock image, restarts the container, and reapplies gamerules.
+echo "Player Count:"
+PLAYERS=$(docker exec bedrock send-command "list" 2>/dev/null | grep -o '[0-9]\+')
+echo "  Players Online: ${PLAYERS:-0}"
 
-`infra/gamerules.sh`  
-Sends gamerule commands into the running Bedrock container to enforce server rules.
+echo "Backups:"
+if [ -d "$BACKUP_DIR" ]; then
+  COUNT=$(ls -1 "$BACKUP_DIR" | wc -l)
+  LAST=$(ls -1t "$BACKUP_DIR" | head -n 1)
+  echo "  Total Backups: $COUNT"
+  echo "  Last Backup: $LAST"
+else
+  echo "  Backup directory missing."
+fi
 
-`infra/backup.sh`  
-Creates a consistent world backup, pauses saving, copies the world data, resumes saving, and prunes backups to keep the last 3 daily copies plus one weekly copy (max 4 backups total).
+echo "Systemd Backup Timer:"
+systemctl is-active --quiet mc-backup.timer && echo "  Timer: ACTIVE" || echo "  Timer: INACTIVE"
 
-`infra/logviewer.sh`  
-Interactive log viewer for Bedrock server logs, backup logs, systemd logs, and live docker log tailing.
+echo "Systemd Backup Service:"
+systemctl is-active --quiet mc-backup.service && echo "  Service: OK" || echo "  Service: ERROR"
 
-`infra/healthcheck.sh`  
-Runs a full operational health check: Docker status, container status, Bedrock responsiveness, backup count, systemd timer status, systemd service status, and disk usage.
+echo "WSL Disk Usage:"
+df -h / | awk 'NR==2 {print "  WSL: " $5 " used (" $4 " free)"}'
 
-`infra/dashboard.sh`  
-Displays a live server status dashboard including uptime, player count, backup summary, systemd status, disk usage, memory usage, and CPU load.
+echo "Windows Disk Usage:"
+df -h /mnt/c | awk 'NR==2 {print "  C: Drive: " $5 " used (" $4 " free)"}'
 
-`infra/restore.sh`  
-Restores a selected backup by stopping the container, replacing the world data, and restarting the server.
+echo "Memory Usage:"
+free -h | awk 'NR==2 {print "  RAM: " $3 " used (" $4 " free)"}'
 
-`infra/mc-backup.service`  
-Systemd service that runs `backup.sh` as a one‑shot job.
+echo "CPU Load:"
+uptime | awk -F'load average:' '{print "  Load Avg:" $2}'
 
-`infra/mc-backup.timer`  
-Systemd timer that triggers the backup service every night at 3 AM.
-
-`infra/install-units.sh`  
-Installs the systemd service and timer into `/etc/systemd/system/`, reloads systemd, enables the timer, and starts it.
-
-## Setup Instructions
-
-1. Clone this repository onto the server’s Windows filesystem.
-2. Open WSL2 and navigate to the repo directory.
-3. Ensure Docker is installed and running inside WSL2.
-
-### Install systemd backup automation
-`chmod +x infra/install-units.sh`  
-`bash infra/install-units.sh`
-
-### Start the Bedrock server
-`docker compose -f infra/docker-compose.yml up -d`
-
-Backups will now run automatically every night at 3 AM, with retention limited to the last 3 daily backups plus one weekly backup.
-
-## Backup Retention Policy
-
-The backup system keeps:  
-- The newest 3 daily backups  
-- One weekly backup older than 7 days  
-- A maximum of 4 backups total  
-
-This ensures consistent restore points without consuming excessive storage.
-
-## Redeployment
-
-To redeploy the server after updates:  
-`chmod +x infra/deploy.sh`  
-`bash infra/deploy.sh`
-
-This pulls the latest Bedrock image, restarts the container, and reapplies gamerules.
-
-## Log Viewing
-
-To view logs interactively:  
-`chmod +x infra/logviewer.sh`  
-`bash infra/logviewer.sh`
-
-Options include Bedrock logs, backup folder contents, systemd backup logs, and live docker log tailing.
-
-## Health Check
-
-To verify server status, backup automation, and system health:  
-`chmod +x infra/healthcheck.sh`  
-`bash infra/healthcheck.sh`
-
-This provides a full operational report.
-
-## Dashboard Status
-
-To view a live dashboard of server health, uptime, player count, backup summary, and system metrics:  
-`chmod +x infra/dashboard.sh`  
-`bash infra/dashboard.sh`
-
-## Restore Instructions
-
-To restore a backup:  
-`chmod +x infra/restore.sh`  
-`bash infra/restore.sh`
-
-Select a backup folder, and the script will stop the container, replace the world data, and restart the server.
-
-## Notes
-
-All systemd units must be installed using `install-units.sh` because systemd only loads units from `/etc/systemd/system/`. Keeping the unit files in the repo ensures full version control and easy redeployment.
+echo "=============================="
+echo " Dashboard Complete"
+echo "=============================="
