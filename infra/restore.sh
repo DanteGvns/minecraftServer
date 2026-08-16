@@ -11,7 +11,7 @@ ls -1 "$BACKUP_DIR"
 echo
 read -p "Enter backup folder name to restore: " FOLDER
 
-TARGET="$BACKUP_DIR/$FOLDER/worlds"
+TARGET="$BACKUP_DIR/$FOLDER/_data/worlds"
 
 if [ ! -d "$TARGET" ]; then
   echo "Backup world folder not found."
@@ -23,10 +23,7 @@ docker stop bedrock
 
 echo "Restoring world data from: $TARGET"
 
-# Remove ONLY the worlds folder
 sudo rm -rf /var/lib/docker/volumes/infra_bedrock_data/_data/worlds/*
-
-# Restore ONLY the worlds folder
 sudo cp -r "$TARGET"/* /var/lib/docker/volumes/infra_bedrock_data/_data/worlds/
 
 echo "Starting Bedrock container..."
