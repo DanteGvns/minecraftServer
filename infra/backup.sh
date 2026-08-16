@@ -13,7 +13,7 @@ sleep 5
 docker exec bedrock send-command "save query"
 sleep 5
 
-sudo cp -r /var/lib/docker/volumes/infra_bedrock_data/_data "$WORLD_BACKUP"
+sudo cp -r /var/lib/docker/volumes/infra_bedrock_data/_data/worlds "$WORLD_BACKUP"
 
 docker exec bedrock send-command "save resume"
 echo "Local backup created at: $WORLD_BACKUP"
