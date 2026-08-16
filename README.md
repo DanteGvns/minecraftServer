@@ -111,7 +111,7 @@ dos2unix infra/*.timer
 
 
 ## dashboard
-chmod +x infra/dashboard.sh
+chmod +x infra/dashboard.sh 
 bash infra/dashboard.sh
 
 
