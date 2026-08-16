@@ -1,3 +1,21 @@
+#!/bin/bash
+# logviewer.sh
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+echo "Minecraft Bedrock Log Viewer"
+echo "Select a log source:"
+echo "1) Bedrock server (docker logs)"
+echo "2) Backup folder contents"
+echo "3) Systemd backup service logs"
+echo "4) Follow Bedrock server logs (live tail)"
+echo "5) Playit agent logs"
+echo "6) Playit tunnel health-check logs"
+echo "7) Exit"
+echo
+read -p "Choice: " CHOICE
+
 case "$CHOICE" in
   1)
     echo "Showing Bedrock server logs..."
