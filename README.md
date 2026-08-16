@@ -104,3 +104,24 @@ All systemd units must be installed using `install-units.sh` because systemd onl
 dos2unix infra/*.sh
 dos2unix infra/*.service
 dos2unix infra/*.timer
+
+
+## dashboard
+chmod +x infra/dashboard.sh
+bash infra/dashboard.sh
+
+
+Alias
+echo "alias mc-dashboard='bash ~/MinecraftServer/minecraftServer/infra/dashboard.sh'" >> ~/.bashrc
+source ~/.bashrc
+
+mc-dashboard
+
+launch_dashboard.bat
+wsl -d Ubuntu bash -c "cd /mnt/c/Users/dante/MinecraftServer/minecraftServer/infra && bash dashboard.sh"
+pause
+
+## Playit.gg
+curl -L https://playit-cloud.github.io/cli/playit-linux-amd64 -o playit
+chmod +x playit
+./playit
