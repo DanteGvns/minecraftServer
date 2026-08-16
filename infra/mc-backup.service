@@ -3,4 +3,4 @@ Description=Minecraft Bedrock Backup Service
 
 [Service]
 Type=oneshot
-ExecStart=/mnt/c/Users/<ServerUser>/Documents/<your-repo>/infra/backup.sh
+ExecStart=/mnt/c/Users/dante/MinecraftServer/minecraftServer/infra/backup.sh
