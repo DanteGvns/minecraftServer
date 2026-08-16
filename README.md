@@ -75,6 +75,7 @@ This pulls the latest Bedrock image, restarts the container, and reapplies gamer
 To view logs interactively:  
 `chmod +x infra/logviewer.sh`  
 `bash infra/logviewer.sh`
+`sudo systemctl status mc-backup.service
 
 Options include Bedrock logs, backup folder contents, systemd backup logs, and live docker log tailing.
 
