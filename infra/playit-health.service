@@ -1,0 +1,7 @@
+[Unit]
+Description=Playit Tunnel Health Check
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/mnt/c/Users/dante/MinecraftServer/minecraftServer/infra/playit-health.sh

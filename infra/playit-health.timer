@@ -1,0 +1,10 @@
+[Unit]
+Description=Run Playit Tunnel Health Check Every Minute
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=60s
+Unit=playit-health.service
+
+[Install]
+WantedBy=timers.target
