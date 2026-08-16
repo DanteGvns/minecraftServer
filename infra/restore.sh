@@ -1,5 +1,4 @@
 #!/bin/bash
-#!/bin/bash
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -12,10 +11,10 @@ ls -1 "$BACKUP_DIR"
 echo
 read -p "Enter backup folder name to restore: " FOLDER
 
-TARGET="$BACKUP_DIR/$FOLDER"
+TARGET="$BACKUP_DIR/$FOLDER/worlds"
 
 if [ ! -d "$TARGET" ]; then
-  echo "Backup folder not found."
+  echo "Backup world folder not found."
   exit 1
 fi
 
@@ -23,8 +22,12 @@ echo "Stopping Bedrock container..."
 docker stop bedrock
 
 echo "Restoring world data from: $TARGET"
-sudo rm -rf /var/lib/docker/volumes/infra_bedrock_data/_data/*
-sudo cp -r "$TARGET"/* /var/lib/docker/volumes/infra_bedrock_data/_data/
+
+# Remove ONLY the worlds folder
+sudo rm -rf /var/lib/docker/volumes/infra_bedrock_data/_data/worlds/*
+
+# Restore ONLY the worlds folder
+sudo cp -r "$TARGET"/* /var/lib/docker/volumes/infra_bedrock_data/_data/worlds/
 
 echo "Starting Bedrock container..."
 docker start bedrock
