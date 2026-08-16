@@ -23,13 +23,12 @@ echo "Bedrock Uptime:"
 docker ps --format '{{.Names}} {{.RunningFor}}' | grep bedrock | awk '{print "  Uptime: " $2 " " $3 " " $4}'
 
 echo "Player Count:"
-RAW_LIST=$(docker exec bedrock send-command "list" 2>/dev/null)
-COUNT=$(echo "$RAW_LIST" | grep -o '[0-9]\+' | head -n 1)
+COUNT=$(docker logs bedrock 2>/dev/null | grep -i "There are" | tail -n 1 | grep -o '[0-9]\+' | head -n 1)
 echo "  Players Online: ${COUNT:-0}"
 
 echo "Player List:"
-PLAYER_LIST=$(echo "$RAW_LIST" | sed -n 's/.*: //p')
-if [ -z "$PLAYER_LIST" ] || [[ "$PLAYER_LIST" == "There"* ]]; then
+PLAYER_LIST=$(docker logs bedrock 2>/dev/null | grep -A1 "There are" | tail -n 1)
+if [[ -z "$PLAYER_LIST" ]] || [[ "$PLAYER_LIST" == "There"* ]]; then
   echo "  No players online."
 else
   echo "  $PLAYER_LIST"
