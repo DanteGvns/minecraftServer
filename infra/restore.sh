@@ -21,6 +21,11 @@ fi
 echo "Stopping Bedrock container..."
 docker stop bedrock
 
+# Wait until container is fully stopped
+while docker ps | grep -q bedrock; do
+    sleep 1
+done
+
 echo "Restoring world data from: $TARGET"
 
 sudo rm -rf /var/lib/docker/volumes/infra_bedrock_data/_data/worlds/*
