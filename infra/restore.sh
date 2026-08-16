@@ -11,7 +11,7 @@ ls -1 "$BACKUP_DIR"
 echo
 read -p "Enter backup folder name to restore: " FOLDER
 
-TARGET="$BACKUP_DIR/$FOLDER/_data/worlds"
+TARGET="$BACKUP_DIR/$FOLDER/worlds"
 
 if [ ! -d "$TARGET" ]; then
   echo "Backup world folder not found."
