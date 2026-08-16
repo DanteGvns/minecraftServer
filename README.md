@@ -1,10 +1,10 @@
 # Minecraft Bedrock Server Infrastructure
 
-This repository contains a complete, self‑contained infrastructure setup for running a Minecraft Bedrock server inside WSL2 using Docker. All deployment, backup, automation, logging, health‑checking, and restore logic is included in the `infra/` directory, making the project fully portable and easy to redeploy on any machine.
+This repository contains a complete, self‑contained infrastructure setup for running a Minecraft Bedrock server inside WSL2 using Docker. All deployment, backup, automation, logging, health‑checking, restore logic, and tunnel monitoring are included in the `infra/` directory, making the project fully portable and easy to redeploy on any machine.
 
 ## Overview
 
-The server runs inside WSL2 using Docker and is managed through a set of scripts and systemd units. The design ensures reliable uptime, automated nightly backups, gamerule enforcement, log viewing, health monitoring, restore capability, and simple redeployment. All infrastructure files live in the repo, while systemd units are installed into the Linux system directory using `install-units.sh`.
+The server runs inside WSL2 using Docker and is managed through a set of scripts and systemd units. The design ensures reliable uptime, automated nightly backups, gamerule enforcement, log viewing, health monitoring, restore capability, Playit.gg tunnel auto‑healing, and simple redeployment. All infrastructure files live in the repo, while systemd units are installed into the Linux system directory using `install-units.sh`.
 
 ## Directory Structure
 
@@ -18,7 +18,10 @@ Pulls the latest Bedrock image, restarts the container, and reapplies gamerules.
 Sends gamerule commands into the running Bedrock container to enforce server rules.
 
 `infra/backup.sh`  
-Creates a consistent world backup, pauses saving, copies the world data, resumes saving, and prunes backups to keep the last 3 daily copies plus one weekly copy (max 4 backups total).
+Creates a consistent world backup, pauses saving, copies the world data, resumes saving, and prunes backups to keep the last 3 daily backups plus one weekly backup (max 4 backups total).
+
+`infra/restore.sh`  
+Restores a selected backup by fully stopping the container, replacing the world data, and restarting the server.
 
 `infra/logviewer.sh`  
 Interactive log viewer for Bedrock server logs, backup logs, systemd logs, and live docker log tailing.
@@ -26,8 +29,17 @@ Interactive log viewer for Bedrock server logs, backup logs, systemd logs, and l
 `infra/healthcheck.sh`  
 Runs a full operational health check: Docker status, container status, Bedrock responsiveness, backup count, systemd timer status, systemd service status, and disk usage.
 
-`infra/restore.sh`  
-Restores a selected backup by stopping the container, replacing the world data, and restarting the server.
+`infra/dashboard.sh`  
+Displays a live dashboard of server health, uptime, player count, backup summary, and system metrics.
+
+`infra/playit-health.sh`  
+Checks Playit.gg tunnel status and restarts the Playit agent if the tunnel is disconnected, stuck, or not forwarding traffic.
+
+`infra/playit-health.service`  
+Systemd service that runs the Playit tunnel health check.
+
+`infra/playit-health.timer`  
+Systemd timer that triggers the Playit tunnel health check every minute.
 
 `infra/mc-backup.service`  
 Systemd service that runs `backup.sh` as a one‑shot job.
@@ -36,7 +48,10 @@ Systemd service that runs `backup.sh` as a one‑shot job.
 Systemd timer that triggers the backup service every night at 3 AM.
 
 `infra/install-units.sh`  
-Installs the systemd service and timer into `/etc/systemd/system/`, reloads systemd, enables the timer, and starts it.
+Installs the Bedrock backup systemd units into `/etc/systemd/system/`, reloads systemd, enables the timer, and starts it.
+
+`infra/install-playit-health.sh`  
+Installs the Playit tunnel auto‑heal systemd units and enables the timer.
 
 ## Setup Instructions
 
@@ -48,10 +63,15 @@ Installs the systemd service and timer into `/etc/systemd/system/`, reloads syst
 `chmod +x infra/install-units.sh`  
 `bash infra/install-units.sh`
 
+### Install Playit.gg auto‑heal system
+`chmod +x infra/install-playit-health.sh`  
+`bash infra/install-playit-health.sh`
+
 ### Start the Bedrock server
 `docker compose -f infra/docker-compose.yml up -d`
 
-Backups will now run automatically every night at 3 AM, with retention limited to the last 3 daily backups plus one weekly backup.
+Backups will now run automatically every night at 3 AM.  
+Playit.gg tunnel health checks run every minute.
 
 ## Backup Retention Policy
 
@@ -75,7 +95,6 @@ This pulls the latest Bedrock image, restarts the container, and reapplies gamer
 To view logs interactively:  
 `chmod +x infra/logviewer.sh`  
 `bash infra/logviewer.sh`
-`sudo systemctl status mc-backup.service
 
 Options include Bedrock logs, backup folder contents, systemd backup logs, and live docker log tailing.
 
@@ -85,47 +104,36 @@ To verify server status, backup automation, and system health:
 `chmod +x infra/healthcheck.sh`  
 `bash infra/healthcheck.sh`
 
-This provides a full operational report.
-
 ## Restore Instructions
 
 To restore a backup:  
 `chmod +x infra/restore.sh`  
 `bash infra/restore.sh`
 
-Select a backup folder, and the script will stop the container, replace the world data, and restart the server.
+Select a backup folder. The script stops the container, replaces the world data, waits for full shutdown, and restarts the server.
 
-If failed
-`docker restart bedrock
+If restore fails:  
+`docker restart bedrock`
 
 ## Notes
 
 All systemd units must be installed using `install-units.sh` because systemd only loads units from `/etc/systemd/system/`. Keeping the unit files in the repo ensures full version control and easy redeployment.
 
-
 ## dos2unix
 
-dos2unix infra/*.sh
-dos2unix infra/*.service
-dos2unix infra/*.timer
+`dos2unix infra/*.sh`  
+`dos2unix infra/*.service`  
+`dos2unix infra/*.timer`
 
+## Dashboard
 
-## dashboard
-chmod +x infra/dashboard.sh 
-bash infra/dashboard.sh
+`chmod +x infra/dashboard.sh`  
+`bash infra/dashboard.sh`
 
+Alias:  
+`echo "alias mc-dashboard='bash ~/MinecraftServer/minecraftServer/infra/dashboard.sh'" >> ~/.bashrc`  
+`source ~/.bashrc`  
+`mc-dashboard`
 
-Alias
-echo "alias mc-dashboard='bash ~/MinecraftServer/minecraftServer/infra/dashboard.sh'" >> ~/.bashrc
-source ~/.bashrc
-
-mc-dashboard
-
-launch_dashboard.bat
-wsl -d Ubuntu bash -c "cd /mnt/c/Users/dante/MinecraftServer/minecraftServer/infra && bash dashboard.sh"
-pause
-
-## Playit.gg
-curl -L https://playit-cloud.github.io/cli/playit-linux-amd64 -o playit
-chmod +x playit
-./playit
+Windows launcher:  
+`launch_dashboard.bat`  

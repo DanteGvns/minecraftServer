@@ -26,6 +26,14 @@ echo "Player Count:"
 PLAYERS=$(docker exec bedrock send-command "list" 2>/dev/null | grep -o '[0-9]\+')
 echo "  Players Online: ${PLAYERS:-0}"
 
+echo "Player List:"
+PLAYER_LIST=$(docker exec bedrock send-command "list" 2>/dev/null | sed -n 's/.*: //p')
+if [ -z "$PLAYER_LIST" ]; then
+  echo "  No players online."
+else
+  echo "  $PLAYER_LIST"
+fi
+
 echo "Backups:"
 if [ -d "$BACKUP_DIR" ]; then
   COUNT=$(ls -1 "$BACKUP_DIR" | wc -l)
@@ -41,6 +49,18 @@ systemctl is-active --quiet mc-backup.timer && echo "  Timer: ACTIVE" || echo " 
 
 echo "Systemd Backup Service:"
 systemctl is-active --quiet mc-backup.service && echo "  Service: OK" || echo "  Service: ERROR"
+
+echo "Playit Agent:"
+systemctl is-active --quiet playit && echo "  Agent: RUNNING" || echo "  Agent: NOT RUNNING"
+
+echo "Playit Tunnel Health:"
+systemctl is-active --quiet playit-health.service && echo "  Health Check: OK" || echo "  Health Check: ERROR"
+
+echo "Playit Tunnel Status:"
+PHASE=$(playit status 2>/dev/null | grep -i "Phase:" | awk '{print $2}')
+TRAFFIC=$(playit status 2>/dev/null | grep -i "Traffic:" | awk '{print $2}')
+echo "  Phase: ${PHASE:-unknown}"
+echo "  Traffic: ${TRAFFIC:-unknown}"
 
 echo "WSL Disk Usage:"
 df -h / | awk 'NR==2 {print "  WSL: " $5 " used (" $4 " free)"}'
