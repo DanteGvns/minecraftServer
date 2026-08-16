@@ -1,20 +1,38 @@
 # backup.sh
 #!/bin/bash
 set -e
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKUP_DIR="$SCRIPT_DIR/backups"
-mkdir -p "$BACKUP_DIR"
-TIMESTAMP="$(date +"%Y-%m-%d_%H-%M-%S")"
-WORLD_BACKUP="$BACKUP_DIR/world_$TIMESTAMP"
 
-echo "Initiating Bedrock world backup..."
-docker exec bedrock send-command "save hold"
-sleep 5
-docker exec bedrock send-command "save query"
-sleep 5
+echo "Minecraft Bedrock Restore Utility"
 
-mkdir -p "$WORLD_BACKUP/worlds"
-sudo cp -r "/var/lib/docker/volumes/infra_bedrock_data/_data/worlds/Bedrock level" "$WORLD_BACKUP/worlds"
+echo "Available backups:"
+ls -1 "$BACKUP_DIR"
+echo
+read -p "Enter backup folder name to restore: " FOLDER
 
-docker exec bedrock send-command "save resume"
-echo "Local backup created at: $WORLD_BACKUP"
+TARGET="$BACKUP_DIR/$FOLDER/worlds"
+
+if [ ! -d "$TARGET" ]; then
+  echo "Backup world folder not found."
+  exit 1
+fi
+
+echo "Stopping Bedrock container..."
+docker stop bedrock
+
+# Wait until container is fully stopped
+while docker ps | grep -q bedrock; do
+    sleep 1
+done
+
+echo "Restoring world data from: $TARGET"
+
+sudo rm -rf /var/lib/docker/volumes/infra_bedrock_data/_data/worlds/*
+sudo cp -r "$TARGET"/* /var/lib/docker/volumes/infra_bedrock_data/_data/worlds/
+
+echo "Starting Bedrock container..."
+docker start bedrock
+
+echo "Restore complete. World has been replaced with backup: $FOLDER"
