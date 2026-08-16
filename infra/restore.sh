@@ -1,5 +1,5 @@
 #!/bin/bash
-# restore.sh
+#!/bin/bash
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -23,8 +23,8 @@ echo "Stopping Bedrock container..."
 docker stop bedrock
 
 echo "Restoring world data from: $TARGET"
-sudo rm -rf /var/lib/docker/volumes/bedrock_data/_data/*
-sudo cp -r "$TARGET"/* /var/lib/docker/volumes/bedrock_data/_data/
+sudo rm -rf /var/lib/docker/volumes/infra_bedrock_data/_data/*
+sudo cp -r "$TARGET"/* /var/lib/docker/volumes/infra_bedrock_data/_data/
 
 echo "Starting Bedrock container..."
 docker start bedrock

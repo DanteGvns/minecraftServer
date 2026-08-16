@@ -95,6 +95,9 @@ To restore a backup:
 
 Select a backup folder, and the script will stop the container, replace the world data, and restart the server.
 
+If failed
+`docker restart bedrock
+
 ## Notes
 
 All systemd units must be installed using `install-units.sh` because systemd only loads units from `/etc/systemd/system/`. Keeping the unit files in the repo ensures full version control and easy redeployment.
