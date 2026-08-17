@@ -218,4 +218,4 @@ The Playit health service loads the same `infra/.env` file as the Minecraft util
 
 The world backups removed from the current Git tree remain in earlier commits. If the repository has been shared or could become public, rewrite its history with `git filter-repo` and coordinate the resulting force-push with every clone; deleting current files alone does not erase historical world data.
 
-The root `minecraftBedrockSeverPlan.md` is retained as historical planning material. `setServerCommands.md` is a first-time Windows/WSL setup runbook. This README is the operational reference.
+The root `minecraftBedrockSeverPlan.md` is retained as historical planning material. `setServerCommands.md` is a first-time Windows/WSL setup runbook. The [GUI implementation plan](GUI_IMPLEMENTATION_PLAN.md) defines the phased plan for a future private administration interface. This README is the operational reference.
