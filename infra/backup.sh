@@ -32,7 +32,7 @@ is_positive_integer "$BACKUP_RETENTION" || {
 	echo "MC_BACKUP_RETENTION must be a positive integer." >&2
 	exit 1
 }
-mkdir -p "$BACKUP_DIR"
+sudo mkdir -p "$BACKUP_DIR"
 WORLD_SOURCE="$(world_mountpoint)"
 sudo test -d "$WORLD_SOURCE" || { echo "World directory not found: $WORLD_SOURCE" >&2; exit 1; }
 world_is_valid "$WORLD_SOURCE" || { echo "Live world is missing level.dat or a nonempty world database: $WORLD_SOURCE" >&2; exit 1; }
@@ -62,7 +62,7 @@ else
 	echo "Container is stopped; copying the offline world."
 fi
 
-mkdir -p "$TEMP_BACKUP/worlds"
+sudo mkdir -p "$TEMP_BACKUP/worlds"
 sudo cp -a "$WORLD_SOURCE" "$TEMP_BACKUP/worlds/"
 world_is_valid "$TEMP_BACKUP/worlds/$WORLD_NAME" || {
 	echo "Backup copy is missing level.dat or a nonempty world database." >&2

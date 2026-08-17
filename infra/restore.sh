@@ -54,7 +54,7 @@ is_valid_port "$SERVER_PORT" || {
   echo "MC_SERVER_PORT must be an integer from 1 through 65535." >&2
   exit 1
 }
-mkdir -p "$BACKUP_DIR" "$PRERESTORE_DIR"
+sudo mkdir -p "$BACKUP_DIR" "$PRERESTORE_DIR"
 acquire_operation_lock
 
 echo "Minecraft Bedrock Restore Utility"
@@ -87,7 +87,7 @@ world_is_valid "$STAGING_DIR/worlds/$WORLD_NAME" || { echo "Staged restore is in
 
 TIMESTAMP="$(date +"%Y-%m-%d_%H-%M-%S")"
 PRERESTORE_PATH="$PRERESTORE_DIR/world_$TIMESTAMP"
-mkdir -p "$PRERESTORE_PATH/worlds"
+sudo mkdir -p "$PRERESTORE_PATH/worlds"
 
 if is_container_running; then
   CONTAINER_WAS_RUNNING=1
