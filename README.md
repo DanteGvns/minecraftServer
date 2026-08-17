@@ -19,6 +19,8 @@ The scripts derive their paths from the checkout, so the same repository can be 
 - `playit-health.timer` checks the tunnel every minute and uses failure thresholds and restart cooldowns.
 - World backups and pre-restore snapshots are stored below `infra/backups` by default.
 
+World backups are runtime data and must not be committed to Git. The directory is ignored, but Git does not provide off-machine disaster recovery; copy backups to another disk or remote target separately.
+
 Do not start the server from PowerShell in the repository. Enter WSL first, then run scripts with `bash`.
 
 ## First-Time Setup
@@ -98,9 +100,11 @@ After `infra/.env` contains the current pinned version:
 bash infra/deploy.sh
 ```
 
-Deployment creates a backup first, pulls the pinned image, starts the container, waits for a live Bedrock `list` response, and records the result in `infra/update-history.log` by default. It does not apply gamerules automatically.
+Deployment creates a backup first, pulls the pinned image, starts the container, and waits for the image's built-in `mc-monitor` to receive a Bedrock UDP status response. It records the result in `infra/update-history.log` by default and does not apply gamerules automatically.
 
-A readiness timeout is a failed deployment and should be investigated before attempting another update. The pre-update backup remains available for recovery.
+On a true first deployment, where no valid world exists yet, deployment skips the pre-update backup. If the container was removed but its Compose volume remains, deployment discovers that volume and creates an offline backup before continuing. A shared advisory lock prevents backup, restore, and deployment from modifying the world concurrently.
+
+If readiness times out, deployment recreates the container with the previous image and Bedrock version and verifies that rollback with the same UDP probe. The command still exits nonzero after a successful rollback so the failed update cannot be mistaken for success. The pre-update backup remains available if automated rollback also fails.
 
 ## Backups
 
@@ -113,14 +117,18 @@ bash infra/backup.sh
 The backup process:
 
 - Holds Bedrock saving.
-- Verifies a paused or disabled save state with `save query` and bounded retries. The accepted pattern can be overridden with `MC_SAVE_QUERY_PATTERN` if the installed image uses different wording.
+- Records a log timestamp, issues `save hold`, and polls with `save query`.
+- Copies only after a new container-log response says the data is ready to be copied. The accepted response can be overridden with `MC_SAVE_QUERY_PATTERN` if Bedrock changes its wording.
 - Resolves the active Docker volume from the container's `/data` mount.
 - Copies into an in-progress directory.
 - Publishes the timestamped backup only after the copy succeeds.
 - Always attempts `save resume`, including when the copy fails.
 - Removes incomplete temporary backups.
+- Validates that `level.dat` and a nonempty world database exist before publishing the backup or applying retention.
 
-The nightly service is installed by `bash infra/install-units.sh` and runs at 3 AM according to `mc-backup.timer`.
+Older installations may have the previous `MC_SAVE_QUERY_PATTERN` value in `infra/.env`. The backup script ignores that unsafe legacy value, but update the file to match `.env.example` so the runtime configuration is unambiguous.
+
+The nightly service is installed by `bash infra/install-units.sh` and runs at 3 AM according to `mc-backup.timer`. The timer is persistent, so a run missed while WSL was stopped is replayed after WSL starts. The installer clears the old timer timestamp before enabling it, so reinstalling the units does not itself trigger a catch-up backup.
 
 ## Restore and Undo
 
@@ -136,7 +144,7 @@ Before replacing the live world, it validates the backup and creates a copy unde
 infra/backups/prerestored/world_<timestamp>
 ```
 
-The latest five pre-restore snapshots are retained. The selected backup is staged before replacement, and the container is restarted if it was running before the restore. Pre-restore snapshots appear in the restore menu under `prerestored/`, so undoing a restore uses the same command.
+The latest five pre-restore snapshots are retained. The selected backup and pre-restore snapshot must both contain `level.dat` and a nonempty database. If the container was running, restore waits for a Bedrock UDP response and automatically puts the original world back if the restored world does not become ready. Interruptions during the directory swap also put the original world back. Pre-restore snapshots appear in the restore menu under `prerestored/`, so undoing a restore uses the same command.
 
 Always verify the selected backup and have a current backup before restoring.
 
@@ -148,9 +156,9 @@ echo $?
 bash infra/dashboard.sh
 ```
 
-The health check returns zero only when required checks pass. It checks Docker, the container, Bedrock responsiveness, UDP port publication, backup timer state, the last one-shot backup result, backup age, and disk usage.
+The health check returns zero only when required checks pass. It checks Docker, the container, a real Bedrock UDP status response, UDP port publication, backup timer state, the last one-shot backup result, backup age, and disk usage.
 
-The dashboard obtains player status from a live Bedrock `list` command. It reports `unknown` when the server cannot be queried instead of treating old log output as current player data. A successful one-shot backup service is reported by its last result even though the service is normally inactive between runs.
+The dashboard obtains current and maximum player counts from the same Bedrock UDP status response. It reports `unknown` when the server cannot be queried. A successful one-shot backup service is reported by its last result even though the service is normally inactive between runs.
 
 ## Playit Health
 
@@ -196,8 +204,18 @@ Runtime values are loaded from `infra/.env`; explicitly exported environment var
 - `MC_PRERESTORE_DIR`: pre-restore snapshot location.
 - `MC_BACKUP_MAX_AGE_HOURS`: health-check backup age limit.
 - `MC_BACKUP_RETENTION`: number of completed normal backups to retain; defaults to four.
+- `MC_SAVE_QUERY_PATTERN`: case-insensitive pattern for a successful, new `save query` response in container logs.
 - `MC_DISK_MAX_USED_PERCENT`: health-check disk threshold.
+- `MC_SERVER_PORT`: Bedrock container and published UDP port checked by `mc-monitor`; defaults to `19132`.
+- `MC_STATUS_TIMEOUT_SECONDS`: maximum duration of one Bedrock UDP status attempt; defaults to 5 seconds.
+- `MC_READY_TIMEOUT_SECONDS`: deployment and rollback readiness timeout; defaults to 120 seconds.
+- `MC_RESTORE_READY_TIMEOUT_SECONDS`: restored-world and rollback readiness timeout; defaults to 120 seconds.
+- `MC_OPERATION_LOCK_FILE`: advisory lock shared by backup, restore, and deploy; defaults below `infra/backups`.
 - `PLAYIT_FAILURE_THRESHOLD`: unhealthy checks before restart.
 - `PLAYIT_RESTART_COOLDOWN_SECONDS`: minimum interval between Playit restarts.
 
-The root `minecraftBedrockSeverPlan.md` is retained as historical planning material; this README is the operational reference.
+The Playit health service loads the same `infra/.env` file as the Minecraft utilities. Numeric configuration is validated before an operation begins.
+
+The world backups removed from the current Git tree remain in earlier commits. If the repository has been shared or could become public, rewrite its history with `git filter-repo` and coordinate the resulting force-push with every clone; deleting current files alone does not erase historical world data.
+
+The root `minecraftBedrockSeverPlan.md` is retained as historical planning material. `setServerCommands.md` is a first-time Windows/WSL setup runbook. This README is the operational reference.

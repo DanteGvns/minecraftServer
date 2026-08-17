@@ -19,11 +19,12 @@ else
 fi
 
 echo "Player Status:"
-if LIST_OUTPUT="$(server_list 2>/dev/null)"; then
-  COUNT="$(printf '%s\n' "$LIST_OUTPUT" | sed -nE 's/.*There are ([0-9]+) of a max.*/\1/p' | tail -n 1)"
-  [ -n "$COUNT" ] || COUNT="$(printf '%s\n' "$LIST_OUTPUT" | sed -nE 's/.*([0-9]+) players? online.*/\1/p' | tail -n 1)"
+if STATUS_OUTPUT="$(server_status 2>/dev/null)"; then
+  COUNT="$(printf '%s\n' "$STATUS_OUTPUT" | sed -nE 's/.*online=([0-9]+).*/\1/p')"
+  MAX="$(printf '%s\n' "$STATUS_OUTPUT" | sed -nE 's/.*max=([0-9]+).*/\1/p')"
   echo "  Players Online: ${COUNT:-unknown}"
-  echo "  Response: $(printf '%s' "$LIST_OUTPUT" | tr '\n' ' ')"
+  echo "  Maximum Players: ${MAX:-unknown}"
+  echo "  Response: $(printf '%s' "$STATUS_OUTPUT" | tr '\n' ' ')"
 else
   echo "  Players Online: unknown (server unavailable)"
 fi

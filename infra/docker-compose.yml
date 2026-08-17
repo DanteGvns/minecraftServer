@@ -1,14 +1,13 @@
-version: "3.8"
-
 services:
   bedrock:
     image: itzg/minecraft-bedrock-server
     container_name: bedrock
     ports:
-      - "19132:19132/udp"
+      - "${MC_SERVER_PORT:-19132}:${MC_SERVER_PORT:-19132}/udp"
     environment:
       EULA: "TRUE"
       VERSION: "${BEDROCK_VERSION:?Set BEDROCK_VERSION in .env before deployment}"
+      SERVER_PORT: "${MC_SERVER_PORT:-19132}"
     volumes:
       - bedrock_data:/data
     restart: unless-stopped
