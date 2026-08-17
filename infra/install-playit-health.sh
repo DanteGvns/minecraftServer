@@ -2,12 +2,14 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPOSITORY_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-sudo cp "$SCRIPT_DIR/playit-health.service" /etc/systemd/system/
+sed "s|/REPOSITORY|$REPOSITORY_DIR|g" "$SCRIPT_DIR/playit-health.service" | sudo tee /etc/systemd/system/playit-health.service >/dev/null
 sudo cp "$SCRIPT_DIR/playit-health.timer" /etc/systemd/system/
 
 sudo systemctl daemon-reload
-sudo systemctl enable playit-health.timer
-sudo systemctl start playit-health.timer
+sudo systemctl reset-failed playit-health.service 2>/dev/null || true
+sudo systemctl enable --now playit-health.timer
+sudo systemctl restart playit-health.timer
 
 echo "Playit auto-heal system installed."

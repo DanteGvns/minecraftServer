@@ -1,80 +1,58 @@
 #!/bin/bash
-# dashboard.sh
-set -e
+
+set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BACKUP_DIR="$SCRIPT_DIR/backups"
+# shellcheck source=lib/common.sh
+source "$SCRIPT_DIR/lib/common.sh"
 
 echo "=============================="
 echo " Minecraft Bedrock Dashboard"
 echo "=============================="
 
-echo "Docker:"
-systemctl is-active --quiet docker && echo "  Docker: RUNNING" || echo "  Docker: NOT RUNNING"
-
-echo "Bedrock Container:"
-if docker ps --format '{{.Names}}' | grep -q "bedrock"; then
-  echo "  Container: RUNNING"
+if systemctl is-active --quiet docker; then echo "Docker: RUNNING"; else echo "Docker: NOT RUNNING"; fi
+if is_container_running; then
+  echo "Container: RUNNING"
+  docker ps --format '{{.Names}} {{.RunningFor}}' | awk -v name="$CONTAINER_NAME" '$1 == name {print "Uptime: " $2 " " $3 " " $4}'
 else
-  echo "  Container: NOT RUNNING"
+  echo "Container: NOT RUNNING"
 fi
 
-echo "Bedrock Uptime:"
-docker ps --format '{{.Names}} {{.RunningFor}}' | grep bedrock | awk '{print "  Uptime: " $2 " " $3 " " $4}'
-
-echo "Player Count:"
-RAW_LIST=$(docker logs bedrock 2>/dev/null | grep -i "There are" | tail -n 1)
-COUNT=$(echo "$RAW_LIST" | sed -n 's/.*There are \([0-9]\+\).*/\1/p')
-echo "  Players Online: ${COUNT:-0}"
-
-echo "Player List:"
-PLAYER_LIST=$(docker logs bedrock 2>/dev/null | grep -A1 "There are" | tail -n 1)
-if [[ -z "$PLAYER_LIST" ]] || [[ "$PLAYER_LIST" == "There"* ]]; then
-  echo "  No players online."
+echo "Player Status:"
+if LIST_OUTPUT="$(server_list 2>/dev/null)"; then
+  COUNT="$(printf '%s\n' "$LIST_OUTPUT" | sed -nE 's/.*There are ([0-9]+) of a max.*/\1/p' | tail -n 1)"
+  [ -n "$COUNT" ] || COUNT="$(printf '%s\n' "$LIST_OUTPUT" | sed -nE 's/.*([0-9]+) players? online.*/\1/p' | tail -n 1)"
+  echo "  Players Online: ${COUNT:-unknown}"
+  echo "  Response: $(printf '%s' "$LIST_OUTPUT" | tr '\n' ' ')"
 else
-  echo "  $PLAYER_LIST"
+  echo "  Players Online: unknown (server unavailable)"
 fi
 
 echo "Backups:"
 if [ -d "$BACKUP_DIR" ]; then
-  COUNT=$(ls -1 "$BACKUP_DIR" | wc -l)
-  LAST=$(ls -1t "$BACKUP_DIR" | head -n 1)
+  COUNT="$(find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d -name 'world_*' | wc -l)"
+  LAST="$(find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d -name 'world_*' -printf '%T@ %f\n' | sort -rn | awk 'NR==1 {$1=""; sub(/^ /, ""); print}')"
   echo "  Total Backups: $COUNT"
-  echo "  Last Backup: $LAST"
+  echo "  Last Backup: ${LAST:-none}"
 else
-  echo "  Backup directory missing."
+  echo "  Backup directory missing"
 fi
 
-echo "Systemd Backup Timer:"
+echo "Backup Automation:"
 systemctl is-active --quiet mc-backup.timer && echo "  Timer: ACTIVE" || echo "  Timer: INACTIVE"
+echo "  Last Result: $(last_service_result mc-backup.service)"
+echo "  Last Exit Code: $(last_service_status mc-backup.service)"
 
-echo "Systemd Backup Service:"
-systemctl is-active --quiet mc-backup.service && echo "  Service: OK" || echo "  Service: ERROR"
-
-echo "Playit Agent:"
+echo "Playit:"
 systemctl is-active --quiet playit && echo "  Agent: RUNNING" || echo "  Agent: NOT RUNNING"
-
-echo "Playit Tunnel Health:"
-systemctl is-active --quiet playit-health.service && echo "  Health Check: OK" || echo "  Health Check: ERROR"
-
-echo "Playit Tunnel Status:"
-PHASE=$(playit status 2>/dev/null | grep -i "Phase:" | awk '{print $2}')
-TRAFFIC=$(playit status 2>/dev/null | grep -i "Traffic:" | awk '{print $2}')
+systemctl is-active --quiet playit-health.timer && echo "  Health Timer: ACTIVE" || echo "  Health Timer: INACTIVE"
+PHASE="$(playit status 2>/dev/null | awk -F: 'tolower($1) ~ /phase/ {gsub(/^[[:space:]]+/, "", $2); print $2; exit}')"
 echo "  Phase: ${PHASE:-unknown}"
-echo "  Traffic: ${TRAFFIC:-unknown}"
 
-echo "WSL Disk Usage:"
+echo "System:"
 df -h / | awk 'NR==2 {print "  WSL: " $5 " used (" $4 " free)"}'
-
-echo "Windows Disk Usage:"
-df -h /mnt/c | awk 'NR==2 {print "  C: Drive: " $5 " used (" $4 " free)"}'
-
-echo "Memory Usage:"
+[ -d /mnt/c ] && df -h /mnt/c | awk 'NR==2 {print "  C: " $5 " used (" $4 " free)"}'
 free -h | awk 'NR==2 {print "  RAM: " $3 " used (" $4 " free)"}'
-
-echo "CPU Load:"
 uptime | awk -F'load average:' '{print "  Load Avg:" $2}'
 
-echo "=============================="
-echo " Dashboard Complete"
 echo "=============================="

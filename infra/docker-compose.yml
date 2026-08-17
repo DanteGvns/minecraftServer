@@ -8,7 +8,7 @@ services:
       - "19132:19132/udp"
     environment:
       EULA: "TRUE"
-      VERSION: "LATEST"
+      VERSION: "${BEDROCK_VERSION:?Set BEDROCK_VERSION in .env before deployment}"
     volumes:
       - bedrock_data:/data
     restart: unless-stopped

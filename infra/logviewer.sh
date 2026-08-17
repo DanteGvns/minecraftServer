@@ -19,17 +19,20 @@ read -p "Choice: " CHOICE
 case "$CHOICE" in
   1)
     echo "Showing Bedrock server logs..."
-    docker logs bedrock
+    docker logs "$CONTAINER_NAME"
     ;;
   2)
     echo "Available backups:"
-    ls -1 "$SCRIPT_DIR/backups"
+    ls -1 "$BACKUP_DIR"
     echo
     read -p "Enter backup folder name: " FOLDER
-    LOGFILE="$SCRIPT_DIR/backups/$FOLDER"
-    if [ -d "$LOGFILE" ]; then
+    case "$FOLDER" in
+      world_[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]_[0-9][0-9]-[0-9][0-9]-[0-9][0-9]) ;;
+      *) echo "Invalid backup folder name."; exit 1 ;;
+    esac
+    if [ -d "$BACKUP_DIR/$FOLDER" ]; then
       echo "Backup folder contents:"
-      ls -1 "$LOGFILE"
+      ls -1 "$BACKUP_DIR/$FOLDER"
     else
       echo "Backup not found."
     fi
@@ -40,7 +43,7 @@ case "$CHOICE" in
     ;;
   4)
     echo "Following Bedrock server logs (Ctrl+C to stop)..."
-    docker logs -f bedrock
+    docker logs -f "$CONTAINER_NAME"
     ;;
   5)
     echo "Showing Playit agent logs..."

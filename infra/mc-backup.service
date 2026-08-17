@@ -1,6 +1,9 @@
 [Unit]
 Description=Minecraft Bedrock Backup Service
+After=docker.service
+Requires=docker.service
 
 [Service]
 Type=oneshot
-ExecStart=/mnt/c/Users/dante/MinecraftServer/minecraftServer/infra/backup.sh
+ExecStart=/bin/bash /REPOSITORY/infra/backup.sh
+WorkingDirectory=/REPOSITORY/infra

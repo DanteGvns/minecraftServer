@@ -1,29 +1,53 @@
 #!/bin/bash
-set -e
 
-# Check if Playit agent is running
-if ! systemctl is-active --quiet playit; then
-    echo "[playit-health] Playit agent is NOT running. Restarting..."
-    sudo systemctl restart playit
-    exit 0
+set -u
+
+FAILURE_THRESHOLD="${PLAYIT_FAILURE_THRESHOLD:-3}"
+COOLDOWN_SECONDS="${PLAYIT_RESTART_COOLDOWN_SECONDS:-300}"
+STATE_FILE="${PLAYIT_HEALTH_STATE_FILE:-/run/playit-health.state}"
+
+mkdir -p "$(dirname "$STATE_FILE")" 2>/dev/null || true
+now="$(date +%s)"
+failures=0
+last_restart=0
+if [ -f "$STATE_FILE" ]; then
+  read -r failures last_restart < "$STATE_FILE" || true
+fi
+failures="${failures:-0}"
+last_restart="${last_restart:-0}"
+
+status_output="$(playit status 2>/dev/null || true)"
+phase="$(printf '%s\n' "$status_output" | awk -F: 'tolower($1) ~ /phase/ {gsub(/^[[:space:]]+/, "", $2); print tolower($2); exit}')"
+forwarding="$(printf '%s\n' "$status_output" | awk -F: 'tolower($1) ~ /forward/ {gsub(/^[[:space:]]+/, "", $2); print tolower($2); exit}')"
+
+if systemctl is-active --quiet playit && {
+  [ "$phase" = "running" ] || [ "$phase" = "connected" ] || [ "$phase" = "online" ] ||
+  [ "$phase" = "active" ] || [ "$phase" = "established" ] || [ "$phase" = "ready" ] ||
+  [ "$forwarding" = "true" ] || [ "$forwarding" = "enabled" ] ||
+  [ "$forwarding" = "active" ] || [ "$forwarding" = "yes" ];
+}; then
+  printf '0 %s\n' "$last_restart" > "$STATE_FILE"
+  echo "[playit-health] Tunnel healthy."
+  exit 0
 fi
 
-# Check tunnel status using playit CLI
-STATUS=$(playit status 2>/dev/null | grep -i "Phase:" | awk '{print $2}')
-
-if [[ "$STATUS" != "running" ]]; then
-    echo "[playit-health] Playit agent running but tunnel NOT active. Restarting..."
-    sudo systemctl restart playit
-    exit 0
+failures=$((failures + 1))
+printf '%s %s\n' "$failures" "$last_restart" > "$STATE_FILE"
+if [ "$failures" -lt "$FAILURE_THRESHOLD" ]; then
+  echo "[playit-health] Unhealthy status ($failures/$FAILURE_THRESHOLD); waiting before restart."
+  exit 0
 fi
 
-# Check for traffic (no traffic = stuck tunnel)
-TRAFFIC=$(playit status 2>/dev/null | grep -i "Traffic:" | awk '{print $2}')
-
-if [[ "$TRAFFIC" == "0" ]]; then
-    echo "[playit-health] Tunnel stuck (0 traffic). Restarting..."
-    sudo systemctl restart playit
-    exit 0
+if [ "$((now - last_restart))" -lt "$COOLDOWN_SECONDS" ]; then
+  echo "[playit-health] Restart suppressed by cooldown."
+  exit 1
 fi
 
-echo "[playit-health] Tunnel healthy."
+echo "[playit-health] Tunnel unhealthy after $failures checks. Restarting agent..."
+if sudo systemctl restart playit; then
+  printf '0 %s\n' "$now" > "$STATE_FILE"
+  exit 0
+fi
+
+echo "[playit-health] Agent restart failed." >&2
+exit 1

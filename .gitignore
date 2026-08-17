@@ -1,0 +1,7 @@
+.env
+infra/.env
+infra/update-history.log
+infra/backups/
+infra/logs/
+infra/.restore.*
+infra/.world-before-restore-*

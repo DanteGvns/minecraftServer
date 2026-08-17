@@ -10,9 +10,8 @@ Set-Service -Name sshd -StartupType 'Automatic'
 #connect from another machine
 #ssh ssh -l "computername\account" tailscale-ip-address
 
-Install RDP stuff
-turn on remote desktop windows 11 pro
-turn off network level authentication
+# Enable Remote Desktop in Windows 11 Pro.
+# Keep Network Level Authentication enabled.
 
 #connect from another machine 
 windows + R  mstsc

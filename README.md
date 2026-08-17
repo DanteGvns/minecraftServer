@@ -1,139 +1,203 @@
 # Minecraft Bedrock Server Infrastructure
 
-This repository contains a complete, self‑contained infrastructure setup for running a Minecraft Bedrock server inside WSL2 using Docker. All deployment, backup, automation, logging, health‑checking, restore logic, and tunnel monitoring are included in the `infra/` directory, making the project fully portable and easy to redeploy on any machine.
+This repository runs a Minecraft Bedrock server in Docker inside WSL2 on Windows 11 Pro. The Playit agent and systemd automation also run inside WSL2.
 
-## Overview
+The server checkout currently lives at:
 
-The server runs inside WSL2 using Docker and is managed through a set of scripts and systemd units. The design ensures reliable uptime, automated nightly backups, gamerule enforcement, log viewing, health monitoring, restore capability, Playit.gg tunnel auto‑healing, and simple redeployment. All infrastructure files live in the repo, while systemd units are installed into the Linux system directory using `install-units.sh`.
+```text
+/mnt/c/Users/dante/MinecraftServer/minecraftServer
+```
 
-## Directory Structure
+The scripts derive their paths from the checkout, so the same repository can be installed under a different Windows user or directory.
 
-`infra/docker-compose.yml`  
-Defines the Bedrock server container, ports, volume, and restart policy.
+## Architecture
 
-`infra/deploy.sh`  
-Pulls the latest Bedrock image, restarts the container, and reapplies gamerules.
+- Windows 11 Pro hosts WSL2 and provides the Windows filesystem.
+- Ubuntu WSL2 runs Docker, systemd, the Bedrock container, and the Playit agent.
+- Docker Compose publishes Bedrock UDP port `19132`.
+- `mc-backup.timer` runs the backup service daily.
+- `playit-health.timer` checks the tunnel every minute and uses failure thresholds and restart cooldowns.
+- World backups and pre-restore snapshots are stored below `infra/backups` by default.
 
-`infra/gamerules.sh`  
-Sends gamerule commands into the running Bedrock container to enforce server rules.
+Do not start the server from PowerShell in the repository. Enter WSL first, then run scripts with `bash`.
 
-`infra/backup.sh`  
-Creates a consistent world backup, pauses saving, copies the world data, resumes saving, and prunes backups to keep the last 3 daily backups plus one weekly backup (max 4 backups total).
+## First-Time Setup
 
-`infra/restore.sh`  
-Restores a selected backup by fully stopping the container, replacing the world data, and restarting the server.
+From PowerShell:
 
-`infra/logviewer.sh`  
-Interactive log viewer for Bedrock server logs, backup logs, systemd logs, and live docker log tailing.
+```powershell
+wsl.exe
+```
 
-`infra/healthcheck.sh`  
-Runs a full operational health check: Docker status, container status, Bedrock responsiveness, backup count, systemd timer status, systemd service status, and disk usage.
+From WSL:
 
-`infra/dashboard.sh`  
-Displays a live dashboard of server health, uptime, player count, backup summary, and system metrics.
+```bash
+cd /mnt/c/Users/dante/MinecraftServer/minecraftServer
+cp .env.example infra/.env
+nano infra/.env
+```
 
-`infra/playit-health.sh`  
-Checks Playit.gg tunnel status and restarts the Playit agent if the tunnel is disconnected, stuck, or not forwarding traffic.
+Set `BEDROCK_VERSION` to the exact version currently deployed on the server. Read the current value from the running server before changing Compose. Do not use `LATEST` for a production world.
 
-`infra/playit-health.service`  
-Systemd service that runs the Playit tunnel health check.
+Install or verify Docker, Docker Compose, and systemd in WSL. The repository assumes `docker compose` (Compose v2), not only the legacy `docker-compose` command.
 
-`infra/playit-health.timer`  
-Systemd timer that triggers the Playit tunnel health check every minute.
+## Line Endings and Script Execution
 
-`infra/mc-backup.service`  
-Systemd service that runs `backup.sh` as a one‑shot job.
+`.gitattributes` forces shell scripts, systemd units, timers, Compose files, and documentation to use LF line endings. On the server, set Git not to rewrite these files after the first pull:
 
-`infra/mc-backup.timer`  
-Systemd timer that triggers the backup service every night at 3 AM.
+```bash
+git config core.autocrlf false
+git config core.eol lf
+git pull --ff-only origin main
+```
 
-`infra/install-units.sh`  
-Installs the Bedrock backup systemd units into `/etc/systemd/system/`, reloads systemd, enables the timer, and starts it.
+Scripts are intentionally run through Bash. You should no longer need to run `chmod +x` or `dos2unix` after every pull:
 
-`infra/install-playit-health.sh`  
-Installs the Playit tunnel auto‑heal systemd units and enables the timer.
+```bash
+bash infra/healthcheck.sh
+bash infra/dashboard.sh
+bash infra/logviewer.sh
+```
 
-## Setup Instructions
+## Existing Server Migration
 
-1. Clone this repository onto the server’s Windows filesystem.
-2. Open WSL2 and navigate to the repo directory.
-3. Ensure Docker is installed and running inside WSL2.
+The server already has systemd units installed. Update them in place:
 
-### Install systemd backup automation
-`chmod +x infra/install-units.sh`  
-`bash infra/install-units.sh`
+```bash
+cd /mnt/c/Users/dante/MinecraftServer/minecraftServer
+git pull --ff-only origin main
+bash infra/install-units.sh
+bash infra/install-playit-health.sh
+```
 
-### Install Playit.gg auto‑heal system
-`chmod +x infra/install-playit-health.sh`  
-`bash infra/install-playit-health.sh`
+The installers:
 
-### Start the Bedrock server
-`docker compose -f infra/docker-compose.yml up -d`
+1. Detect the current repository directory.
+2. Generate systemd service files with that directory embedded.
+3. Use `ExecStart=/bin/bash`, so executable permissions on `/mnt/c` are not required.
+4. Run `systemctl daemon-reload`.
+5. Keep the existing unit names.
+6. Enable and restart the timers without starting a backup immediately.
 
-Backups will now run automatically every night at 3 AM.  
-Playit.gg tunnel health checks run every minute.
+Verify the migration:
 
-## Backup Retention Policy
+```bash
+systemctl cat mc-backup.service
+systemctl cat playit-health.service
+systemctl list-timers --all | grep -E 'mc-backup|playit-health'
+systemctl status mc-backup.timer playit-health.timer --no-pager
+```
 
-The backup system keeps:  
-- The newest 3 daily backups  
-- One weekly backup older than 7 days  
-- A maximum of 4 backups total  
+A running backup does not need to be deleted and recreated. If systemd reports a backup currently in progress, wait for it to finish before reinstalling the unit.
 
-This ensures consistent restore points without consuming excessive storage.
+## Start and Update
 
-## Redeployment
+After `infra/.env` contains the current pinned version:
 
-To redeploy the server after updates:  
-`chmod +x infra/deploy.sh`  
-`bash infra/deploy.sh`
+```bash
+bash infra/deploy.sh
+```
 
-This pulls the latest Bedrock image, restarts the container, and reapplies gamerules.
+Deployment creates a backup first, pulls the pinned image, starts the container, waits for a live Bedrock `list` response, and records the result in `infra/update-history.log` by default. It does not apply gamerules automatically.
 
-## Log Viewing
+A readiness timeout is a failed deployment and should be investigated before attempting another update. The pre-update backup remains available for recovery.
 
-To view logs interactively:  
-`chmod +x infra/logviewer.sh`  
-`bash infra/logviewer.sh`
+## Backups
 
-Options include Bedrock logs, backup folder contents, systemd backup logs, and live docker log tailing.
+Run a manual backup with:
 
-## Health Check
+```bash
+bash infra/backup.sh
+```
 
-To verify server status, backup automation, and system health:  
-`chmod +x infra/healthcheck.sh`  
-`bash infra/healthcheck.sh`
+The backup process:
 
-## Restore Instructions
+- Holds Bedrock saving.
+- Verifies a paused or disabled save state with `save query` and bounded retries. The accepted pattern can be overridden with `MC_SAVE_QUERY_PATTERN` if the installed image uses different wording.
+- Resolves the active Docker volume from the container's `/data` mount.
+- Copies into an in-progress directory.
+- Publishes the timestamped backup only after the copy succeeds.
+- Always attempts `save resume`, including when the copy fails.
+- Removes incomplete temporary backups.
 
-To restore a backup:  
-`chmod +x infra/restore.sh`  
-`bash infra/restore.sh`
+The nightly service is installed by `bash infra/install-units.sh` and runs at 3 AM according to `mc-backup.timer`.
 
-Select a backup folder. The script stops the container, replaces the world data, waits for full shutdown, and restarts the server.
+## Restore and Undo
 
-If restore fails:  
-`docker restart bedrock`
+Run the interactive restore utility during a maintenance window:
 
-## Notes
+```bash
+bash infra/restore.sh
+```
 
-All systemd units must be installed using `install-units.sh` because systemd only loads units from `/etc/systemd/system/`. Keeping the unit files in the repo ensures full version control and easy redeployment.
+Before replacing the live world, it validates the backup and creates a copy under:
 
-## dos2unix
+```text
+infra/backups/prerestored/world_<timestamp>
+```
 
-`dos2unix infra/*.sh`  
-`dos2unix infra/*.service`  
-`dos2unix infra/*.timer`
+The latest five pre-restore snapshots are retained. The selected backup is staged before replacement, and the container is restarted if it was running before the restore. Pre-restore snapshots appear in the restore menu under `prerestored/`, so undoing a restore uses the same command.
 
-## Dashboard
+Always verify the selected backup and have a current backup before restoring.
 
-`chmod +x infra/dashboard.sh`  
-`bash infra/dashboard.sh`
+## Health Check and Dashboard
 
-Alias:  
-`echo "alias mc-dashboard='bash ~/MinecraftServer/minecraftServer/infra/dashboard.sh'" >> ~/.bashrc`  
-`source ~/.bashrc`  
-`mc-dashboard`
+```bash
+bash infra/healthcheck.sh
+echo $?
+bash infra/dashboard.sh
+```
 
-Windows launcher:  
-`launch_dashboard.bat`  
+The health check returns zero only when required checks pass. It checks Docker, the container, Bedrock responsiveness, UDP port publication, backup timer state, the last one-shot backup result, backup age, and disk usage.
+
+The dashboard obtains player status from a live Bedrock `list` command. It reports `unknown` when the server cannot be queried instead of treating old log output as current player data. A successful one-shot backup service is reported by its last result even though the service is normally inactive between runs.
+
+## Playit Health
+
+The Playit health timer is installed with:
+
+```bash
+bash infra/install-playit-health.sh
+```
+
+A connected tunnel with zero traffic is healthy. The health check accepts common connected and forwarding states, requires repeated unhealthy results before restarting Playit, and applies a restart cooldown to prevent loops.
+
+Useful commands:
+
+```bash
+systemctl status playit playit-health.timer --no-pager
+journalctl -u playit-health.service --no-pager
+```
+
+## Gamerules
+
+Gamerule policy is intentionally not enforced during deployment yet. Edit and run `infra/gamerules.sh` only after deciding the desired settings with the server players. Keep the desired values in that one script so they are easy to change.
+
+## Logs
+
+```bash
+bash infra/logviewer.sh
+journalctl -u mc-backup.service --no-pager
+journalctl -u playit-health.service --no-pager
+docker logs "${MC_CONTAINER_NAME:-bedrock}"
+```
+
+## Windows Remote Access
+
+Keep Remote Desktop Network Level Authentication enabled. Restrict RDP through Windows Firewall and the trusted Tailscale interface or subnet. Do not expose RDP broadly to the public network.
+
+## Configuration
+
+Runtime values are loaded from `infra/.env`; explicitly exported environment variables take precedence. Important values include:
+
+- `BEDROCK_VERSION`: required exact Bedrock version.
+- `COMPOSE_PROJECT_NAME`: defaults to `infra`.
+- `MC_BACKUP_DIR`: backup location.
+- `MC_PRERESTORE_DIR`: pre-restore snapshot location.
+- `MC_BACKUP_MAX_AGE_HOURS`: health-check backup age limit.
+- `MC_BACKUP_RETENTION`: number of completed normal backups to retain; defaults to four.
+- `MC_DISK_MAX_USED_PERCENT`: health-check disk threshold.
+- `PLAYIT_FAILURE_THRESHOLD`: unhealthy checks before restart.
+- `PLAYIT_RESTART_COOLDOWN_SECONDS`: minimum interval between Playit restarts.
+
+The root `minecraftBedrockSeverPlan.md` is retained as historical planning material; this README is the operational reference.

@@ -1,57 +1,54 @@
 #!/bin/bash
-# healthcheck.sh
-set -e
+
+set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BACKUP_DIR="$SCRIPT_DIR/backups"
+# shellcheck source=lib/common.sh
+source "$SCRIPT_DIR/lib/common.sh"
+
+BACKUP_MAX_AGE_HOURS="${MC_BACKUP_MAX_AGE_HOURS:-26}"
+DISK_MAX_USED_PERCENT="${MC_DISK_MAX_USED_PERCENT:-90}"
+FAILURES=0
+
+pass() { echo "OK: $1"; }
+fail() { echo "FAIL: $1"; FAILURES=$((FAILURES + 1)); }
 
 echo "Minecraft Bedrock Server Health Check"
 
-echo "Checking Docker..."
-if systemctl is-active --quiet docker; then
-  echo "Docker: OK"
-else
-  echo "Docker: NOT RUNNING"
-fi
+if systemctl is-active --quiet docker; then pass "Docker is running"; else fail "Docker is not running"; fi
+if require_container 2>/dev/null; then pass "Bedrock container exists"; else fail "Bedrock container does not exist"; fi
+if is_container_running; then pass "Bedrock container is running"; else fail "Bedrock container is not running"; fi
+if is_container_running && server_list >/dev/null 2>&1; then pass "Bedrock server responds to list"; else fail "Bedrock server did not respond to list"; fi
+if docker port "$CONTAINER_NAME" 19132/udp 2>/dev/null | grep -q .; then pass "Bedrock UDP port is published"; else fail "Bedrock UDP port is not published"; fi
 
-echo "Checking Bedrock container..."
-if docker ps --format '{{.Names}}' | grep -q "bedrock"; then
-  echo "Bedrock container: RUNNING"
-else
-  echo "Bedrock container: NOT RUNNING"
-fi
-
-echo "Checking Bedrock server responsiveness..."
-if docker exec bedrock send-command "list" >/dev/null 2>&1; then
-  echo "Bedrock server: RESPONDING"
-else
-  echo "Bedrock server: NO RESPONSE"
-fi
-
-echo "Checking backup directory..."
 if [ -d "$BACKUP_DIR" ]; then
-  echo "Backup directory: OK"
-  COUNT=$(ls -1 "$BACKUP_DIR" | wc -l)
-  echo "Backups found: $COUNT"
+  backup_count="$(find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d -name 'world_*' | wc -l)"
+  pass "Backup directory exists ($backup_count backups)"
 else
-  echo "Backup directory: MISSING"
+  fail "Backup directory is missing"
 fi
 
-echo "Checking systemd backup timer..."
-if systemctl is-active --quiet mc-backup.timer; then
-  echo "Backup timer: ACTIVE"
+if systemctl is-active --quiet mc-backup.timer; then pass "Backup timer is active"; else fail "Backup timer is inactive"; fi
+SERVICE_RESULT="$(last_service_result mc-backup.service)"
+SERVICE_STATUS="$(last_service_status mc-backup.service)"
+if [ "$SERVICE_RESULT" = "success" ] || [ "$SERVICE_STATUS" = "0" ]; then pass "Last backup service run succeeded"; else fail "Last backup service run failed or has not run"; fi
+
+LATEST_BACKUP="$(find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d -name 'world_*' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n 1)"
+if [ -n "$LATEST_BACKUP" ]; then
+  BACKUP_TIME="${LATEST_BACKUP%% *}"
+  NOW="$(date +%s)"
+  BACKUP_AGE_HOURS="$(( (NOW - ${BACKUP_TIME%.*}) / 3600 ))"
+  if [ "$BACKUP_AGE_HOURS" -le "$BACKUP_MAX_AGE_HOURS" ]; then pass "Newest backup is ${BACKUP_AGE_HOURS} hours old"; else fail "Newest backup is ${BACKUP_AGE_HOURS} hours old"; fi
 else
-  echo "Backup timer: INACTIVE"
+  fail "No completed backups found"
 fi
 
-echo "Checking systemd backup service status..."
-systemctl --no-pager status mc-backup.service >/dev/null 2>&1 && echo "Backup service: OK" || echo "Backup service: ERROR"
+for mount in / /mnt/c; do
+  if [ -d "$mount" ]; then
+    USED="$(df -P "$mount" | awk 'NR==2 {gsub(/%/, "", $5); print $5}')"
+    if [ "${USED:-100}" -lt "$DISK_MAX_USED_PERCENT" ]; then pass "$mount disk usage is ${USED}%"; else fail "$mount disk usage is ${USED}%"; fi
+  fi
+done
 
-echo "Checking WSL disk space..."
-df -h / | awk 'NR==2 {print "WSL Disk: " $5 " used (" $4 " free)"}'
-
-echo "Checking Windows disk space..."
-df -h /mnt/c | awk 'NR==2 {print "C: Drive: " $5 " used (" $4 " free)"}'
-
-echo "Health check complete."
-
+echo "Health check complete: $FAILURES failure(s)."
+exit "$FAILURES"
