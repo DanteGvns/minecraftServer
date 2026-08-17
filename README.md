@@ -128,7 +128,7 @@ The backup process:
 
 Older installations may have the previous `MC_SAVE_QUERY_PATTERN` value in `infra/.env`. The backup script ignores that unsafe legacy value, but update the file to match `.env.example` so the runtime configuration is unambiguous.
 
-The nightly service is installed by `bash infra/install-units.sh` and runs at 3 AM according to `mc-backup.timer`. The timer is persistent, so a run missed while WSL was stopped is replayed after WSL starts. The installer clears the old timer timestamp before enabling it, so reinstalling the units does not itself trigger a catch-up backup.
+The nightly service is installed by `bash infra/install-units.sh` and runs at 3 AM according to `mc-backup.timer`. The timer is persistent, so a run missed while WSL was stopped is replayed after WSL starts. The installer records the migration time before enabling the timer, so reinstalling the units does not itself trigger a catch-up backup.
 
 ## Restore and Undo
 

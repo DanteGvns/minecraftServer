@@ -6,4 +6,4 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 ExecStart=/bin/bash "/REPOSITORY/infra/playit-health.sh"
-WorkingDirectory="/REPOSITORY/infra"
+WorkingDirectory=/REPOSITORY/infra

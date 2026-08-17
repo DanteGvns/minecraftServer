@@ -13,7 +13,8 @@ sudo cp "$SCRIPT_DIR/mc-backup.timer" /etc/systemd/system/mc-backup.timer
 sudo systemctl stop mc-backup.timer 2>/dev/null || true
 sudo systemctl daemon-reload
 sudo systemctl reset-failed mc-backup.service 2>/dev/null || true
-sudo rm -f /var/lib/systemd/timers/stamp-mc-backup.timer
+sudo mkdir -p /var/lib/systemd/timers
+sudo touch /var/lib/systemd/timers/stamp-mc-backup.timer
 sudo systemctl enable --now mc-backup.timer
 
 echo "Systemd backup units installed and timer started."

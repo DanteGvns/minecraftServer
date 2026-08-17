@@ -6,4 +6,4 @@ Requires=docker.service
 [Service]
 Type=oneshot
 ExecStart=/bin/bash "/REPOSITORY/infra/backup.sh"
-WorkingDirectory="/REPOSITORY/infra"
+WorkingDirectory=/REPOSITORY/infra
